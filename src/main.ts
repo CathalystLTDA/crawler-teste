@@ -27,9 +27,14 @@ async function collectCategoryLinks(page: any, requestQueue: any): Promise<void>
     await scrollToBottom();  // Scroll to ensure all products are loaded
 
 
-    // Collect all "See All Items" links
-    const categoryLinks: string[] = await page.$$eval('.market-catalog-aisle__see-all-items', (links:any) =>
-        links.map((link:any) => link.getAttribute('href')?.replace(/&amp;/g, '&')) // Replace &amp; with & if necessary
+   // Collect all "See All Items" links, excluding those with span content "Loja Toda"
+   const categoryLinks: string[] = await page.$$eval('.aisle-menu__item__link', (links: any) =>
+    links
+        .filter((link: any) => {
+            const span = link.querySelector('span');
+            return span && span.textContent.trim() !== 'Loja Toda'; // Exclude if the span content is "Loja Toda"
+        })
+        .map((link: any) => link.getAttribute('href')?.replace(/&amp;/g, '&')) // Replace &amp; with & if necessary
     );
     console.log(`Found ${categoryLinks.length} category links.`);
 
@@ -60,6 +65,8 @@ async function scrapeProducts(page: any): Promise<void> {
 
     await scrollToBottom();  // Scroll to ensure all products are loaded
 
+    const categoryTitle: string = await page.$eval('.breadcrumbs-container__title', (el:any) => el.textContent?.trim() || '');
+
     // Extract product data
     const products: Product[] = await page.evaluate(() => {
         const items: Product[] = [];
@@ -69,7 +76,7 @@ async function scrapeProducts(page: any): Promise<void> {
             const name = el.querySelector('.product-card__description')?.getAttribute('title') || '';
             const price = el.querySelector('.product-card__price')?.textContent?.trim() || '';
             const imageUrl = el.querySelector('img.product-card-image__content')?.getAttribute('src') || '';
-            if (name && price && imageUrl) {
+            if (name && price) {
                 items.push({ name, price, imageUrl });
             }
         });
@@ -79,9 +86,10 @@ async function scrapeProducts(page: any): Promise<void> {
 
     console.log(`Scraped ${products.length} products from ${page.url()}.`);
     console.table(products);
-
+    const dataset = await Actor.openDataset(categoryTitle);
+    await dataset.pushData(products);
     // Save the scraped data
-    await Actor.pushData(products);
+    //await Actor.pushData(products);
 }
 
 Actor.main(async () => {
