@@ -8,8 +8,76 @@ interface Product {
     category?: string;
 }
 
-const baseUrl = 'https://www.ifood.com.br/delivery/porto-alegre-rs/bistek---poa-astir-bela-vista/ece0c803-b8a8-4f6d-bb66-28c58b054b31'; // Replace with the actual URL
+const baseUrl = 'https://www.ifood.com.br/mercados'; // Replace with the actual URL
 
+
+async function getMarkets(page: any, requestQueue: any): Promise<void>{
+    console.log(`Processing ${page.url()}...`);
+
+    await page.click('.address-search-input__button');
+    // Step 1: Type the address in the input field
+    await page.type('.address-search-input__field', 'Coronel Bordini 187');
+    await page.waitForTimeout(1000);
+    console.log('waited 1s')
+    await page.waitForTimeout(1000);
+    console.log('waited 2s')
+
+    // Step 2: Wait for the dropdown options to appear
+    await page.waitForSelector('.btn-address--full-size', { state: 'visible' });
+    await page.waitForTimeout(1000);
+    console.log('waited 1s')
+
+   // Get the data-test-id of the first li element
+    const liId = await page.$$eval('li .btn-address--full-size', (elements: any) => {
+        const firstElement = elements[0]?.closest('li'); // Find the closest li element
+        return firstElement ? firstElement.getAttribute('data-test-id') : null; // Get data-test-id of the li element
+    });
+    console.log(liId)
+
+    // Click on the button inside the li element
+    await page.click(`li[data-test-id=${liId}] .btn-address--full-size`);
+    console.log('clicked address')
+
+    // Wait for the button to appear and be clickable
+    await page.waitForSelector('button.btn--default.btn--size-m.address-maps__submit');
+    console.log('red button is visible')
+    await page.waitForTimeout(2000);
+    console.log('waited 2s')
+    // Click on the button
+    await page.click('button.btn--default.btn--size-m.address-maps__submit');
+    console.log('clicked red button')
+
+    await page.waitForTimeout(2000);
+    console.log('waited 2s')
+
+    await page.mouse.move(100, 100);
+    console.log('moved mouse')
+
+
+    // Wait for the button to appear and be clickable
+    await page.waitForSelector('.complete-address--save-btn');
+    console.log('red button is visible')
+    await page.waitForTimeout(2000);
+    console.log('waited 2s')
+    // Click on the button
+    await page.click('.complete-address--save-btn');
+    console.log('clicked red button')
+    await page.waitForTimeout(5000);
+
+    const marketsLinks = await page.$$eval('.merchant-content__link', (links: any) =>
+        links.map((link: any) => link.getAttribute('href')?.replace(/&amp;/g, '&')) // Replace &amp; with & if necessary
+    )
+    console.log(`Found ${marketsLinks.length} markets links.`);
+
+    // Add each category URL to the queue
+    for (const link of marketsLinks) {
+        if (link) {
+            const fullUrl = new URL(link, page.url()).href; // Make the href absolute by resolving against the current page URL
+            console.log(`Adding ${fullUrl} to the queue...`);
+            await requestQueue.addRequest({ url: fullUrl });
+        }
+    }
+}
 // Function to collect category links
 async function collectCategoryLinks(page: any, requestQueue: any): Promise<void> {
     console.log(`Processing ${page.url()}...`);
@@ -67,6 +135,7 @@ async function scrapeProducts(page: any): Promise<void> {
     await scrollToBottom();  // Scroll to ensure all products are loaded
 
     const category: string = await page.$eval('.breadcrumbs-container__title', (el:any) => el.textContent?.trim() || '');
+    const marketTitle: string = await page.$eval('.market-header__title', (el:any) => el.textContent?.trim() || 'sem nome');
 
     // Extract product data
     const products: Product[] = await page.evaluate(( ) => {
@@ -88,7 +157,8 @@ async function scrapeProducts(page: any): Promise<void> {
     console.log(`Scraped ${products.length} products from ${page.url()}.`);
     //console.table(products);
     const productsWithCategory = products.map((product) => ({ ...product, category }));
-    const dataset = await Actor.openDataset(category);
+    const path = marketTitle + '/' + category;
+    const dataset = await Actor.openDataset(path);
     await dataset.pushData(productsWithCategory);
     // Save the scraped data
     //await Actor.pushData(products);
@@ -110,11 +180,14 @@ Actor.main(async () => {
             await page.waitForTimeout(5000);
 
             if (request.url === baseUrl) {
-                // Collect category links on the main page
-                await collectCategoryLinks(page, requestQueue);
-            } else {
+                await getMarkets(page, requestQueue);
+            } else if (request.url.includes('corredor')) {
                 // Scrape products on category pages
                 await scrapeProducts(page);
+            }
+            else {
+                // Collect category links on the main page
+                await collectCategoryLinks(page, requestQueue);
             }
         },
         maxConcurrency: 5, // Adjust concurrency based on your needs
