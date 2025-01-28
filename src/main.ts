@@ -5,6 +5,7 @@ interface Product {
     name: string;
     price: string;
     imageUrl: string;
+    category?: string;
 }
 
 const baseUrl = 'https://www.ifood.com.br/delivery/porto-alegre-rs/bistek---poa-astir-bela-vista/ece0c803-b8a8-4f6d-bb66-28c58b054b31'; // Replace with the actual URL
@@ -65,10 +66,10 @@ async function scrapeProducts(page: any): Promise<void> {
 
     await scrollToBottom();  // Scroll to ensure all products are loaded
 
-    const categoryTitle: string = await page.$eval('.breadcrumbs-container__title', (el:any) => el.textContent?.trim() || '');
+    const category: string = await page.$eval('.breadcrumbs-container__title', (el:any) => el.textContent?.trim() || '');
 
     // Extract product data
-    const products: Product[] = await page.evaluate(() => {
+    const products: Product[] = await page.evaluate(( ) => {
         const items: Product[] = [];
         const productElements = document.querySelectorAll('a.product-card-content'); // Selector for product cards
 
@@ -77,7 +78,7 @@ async function scrapeProducts(page: any): Promise<void> {
             const price = el.querySelector('.product-card__price')?.textContent?.trim() || '';
             const imageUrl = el.querySelector('img.product-card-image__content')?.getAttribute('src') || '';
             if (name && price) {
-                items.push({ name, price, imageUrl });
+                items.push({ name, price, imageUrl});
             }
         });
 
@@ -85,9 +86,10 @@ async function scrapeProducts(page: any): Promise<void> {
     });
 
     console.log(`Scraped ${products.length} products from ${page.url()}.`);
-    console.table(products);
-    const dataset = await Actor.openDataset(categoryTitle);
-    await dataset.pushData(products);
+    //console.table(products);
+    const productsWithCategory = products.map((product) => ({ ...product, category }));
+    const dataset = await Actor.openDataset(category);
+    await dataset.pushData(productsWithCategory);
     // Save the scraped data
     //await Actor.pushData(products);
 }
