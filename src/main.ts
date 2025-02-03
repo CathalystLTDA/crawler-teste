@@ -16,7 +16,7 @@ async function getMarkets(page: any, requestQueue: any): Promise<void>{
 
     await page.click('.address-search-input__button');
     // Step 1: Type the address in the input field
-    await page.type('.address-search-input__field', 'Coronel Bordini 187');
+    await page.type('.address-search-input__field', 'Coronel Bordini 187 Porto Alegre Rio Grande do Sul');
     await page.waitForTimeout(1000);
     console.log('waited 1s')
     await page.waitForTimeout(1000);
@@ -63,6 +63,8 @@ async function getMarkets(page: any, requestQueue: any): Promise<void>{
     await page.click('.complete-address--save-btn');
     console.log('clicked red button')
     await page.waitForTimeout(5000);
+    console.log('waited 5s')
+    console.log('looking for markets')
 
     const marketsLinks = await page.$$eval('.merchant-content__link', (links: any) =>
         links.map((link: any) => link.getAttribute('href')?.replace(/&amp;/g, '&')) // Replace &amp; with & if necessary
