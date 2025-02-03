@@ -171,6 +171,7 @@ Actor.main(async () => {
     await requestQueue.addRequest({ url: baseUrl });
 
     const crawler = new PlaywrightCrawler({
+        requestHandlerTimeoutSecs: 120,
         requestQueue,
         launchContext: {
             launchOptions: {
