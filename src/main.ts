@@ -6,6 +6,7 @@ interface Product {
     price: string;
     imageUrl: string;
     category?: string;
+    market?: string;
 }
 
 const baseUrl = 'https://www.ifood.com.br/mercados'; // Replace with the actual URL
@@ -187,12 +188,12 @@ async function scrapeProducts(page: any): Promise<void> {
 
     console.log(`Scraped ${products.length} products from ${page.url()}.`);
     //console.table(products);
-    const productsWithCategory = products.map((product) => ({ ...product, category }));
-    const path = marketTitle + '/' + category;
-    const dataset = await Actor.openDataset(path);
-    await dataset.pushData(productsWithCategory);
+    const productsWithCategory = products.map((product) => ({ ...product, category, market: marketTitle }));
+    // const path = marketTitle + '/' + category;
+    // const dataset = await Actor.openDataset(path);
+    // await dataset.pushData(productsWithCategory);
     // Save the scraped data
-    //await Actor.pushData(products);
+    await Actor.pushData(productsWithCategory);
 }
 
 Actor.main(async () => {
