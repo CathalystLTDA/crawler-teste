@@ -16,7 +16,7 @@ async function getMarkets(page: any, requestQueue: any): Promise<void>{
 
     await page.click('.address-search-input__button');
     // Step 1: Type the address in the input field
-    await page.type('.address-search-input__field', 'Coronel Bordini 187 Porto Alegre Rio Grande do Sul');
+    await page.type('.address-search-input__field', 'Rua Ernesto Fontoura 1401 São Geraldo');
     await page.waitForTimeout(1000);
     console.log('waited 1s')
     await page.waitForTimeout(1000);
@@ -64,9 +64,38 @@ async function getMarkets(page: any, requestQueue: any): Promise<void>{
     console.log('clicked red button')
     await page.waitForTimeout(5000);
     console.log('waited 5s')
-    console.log('looking for markets')
+    // const atacados = await page.$('//span[contains(text(), "Atacados")]');
+    // console.log('procurou o span')
+    // if (atacados) {
+    //     console.log('span found')
+    //     await atacados.click();
+    // }
+    const link = await page.locator('//a[span[contains(text(), "Atacados")]]');
+    const href = await link.getAttribute('href');
 
-    const marketsLinks = await page.$$eval('.merchant-content__link', (links: any) =>
+    console.log('Found href:', href);
+    const fullUrl = new URL(href, page.url()).href; // Make the href absolute by resolving against the current page URL
+    console.log(`Adding ${fullUrl} to the queue...`);
+    await requestQueue.addRequest({ url: fullUrl });
+
+    // const marketsLinks = await page.$$eval('.merchant-content__link', (links: any) =>
+    //     links.map((link: any) => link.getAttribute('href')?.replace(/&amp;/g, '&')) // Replace &amp; with & if necessary
+    // )
+    // console.log(`Found ${marketsLinks.length} markets links.`);
+
+    // // Add each category URL to the queue
+    // for (const link of marketsLinks) {
+    //     if (link) {
+    //         const fullUrl = new URL(link, page.url()).href; // Make the href absolute by resolving against the current page URL
+    //         console.log(`Adding ${fullUrl} to the queue...`);
+    //         await requestQueue.addRequest({ url: fullUrl });
+    //     }
+    // }
+}
+
+async function getAtacados(page: any, requestQueue: any): Promise<void>{
+    console.log(`Processing ${page.url()}...`);
+    const marketsLinks = await page.$$eval('.merchant-v2__link', (links: any) =>
         links.map((link: any) => link.getAttribute('href')?.replace(/&amp;/g, '&')) // Replace &amp; with & if necessary
     )
     console.log(`Found ${marketsLinks.length} markets links.`);
@@ -175,7 +204,7 @@ Actor.main(async () => {
         requestQueue,
         launchContext: {
             launchOptions: {
-                headless: true,
+                headless: false,
             },
         },
         requestHandler: async ({ page, request }) => {
@@ -187,6 +216,10 @@ Actor.main(async () => {
             } else if (request.url.includes('corredor')) {
                 // Scrape products on category pages
                 await scrapeProducts(page);
+            }
+            else if (request.url.includes('atacados')) {
+                // Scrape products on category pages
+                await getAtacados(page, requestQueue);
             }
             else {
                 // Collect category links on the main page
