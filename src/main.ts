@@ -254,7 +254,7 @@ Actor.main(async () => {
                 await collectCategoryLinks(page, requestQueue);
             }
         },
-        maxConcurrency: 5, // Adjust concurrency based on your needs
+        maxConcurrency: 10, // Adjust concurrency based on your needs
     });
 
     await crawler.run();
