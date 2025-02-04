@@ -3,13 +3,115 @@ import { PlaywrightCrawler } from 'crawlee';
 
 interface Product {
     name: string;
-    price: string;
+    regularPrice: string;
+    discountPrice?: string;
+    discountCondition?: string;
     imageUrl: string;
     category?: string;
+    market?: string;
 }
 
-const baseUrl = 'https://www.ifood.com.br/delivery/porto-alegre-rs/bistek---poa-astir-bela-vista/ece0c803-b8a8-4f6d-bb66-28c58b054b31'; // Replace with the actual URL
+const baseUrl = 'https://www.ifood.com.br/mercados'; // Replace with the actual URL
 
+
+async function getMarkets(page: any, requestQueue: any): Promise<void>{
+    console.log(`Processing ${page.url()}...`);
+
+    await page.click('.address-search-input__button');
+    // Step 1: Type the address in the input field
+    await page.type('.address-search-input__field', 'Rua Ernesto Fontoura 1401 São Geraldo');
+    await page.waitForTimeout(1000);
+    //console.log('waited 1s')
+    await page.waitForTimeout(1000);
+    console.log('waited 2s')
+
+    // Step 2: Wait for the dropdown options to appear
+    await page.waitForSelector('.btn-address--full-size', { state: 'visible' });
+    await page.waitForTimeout(1000);
+    console.log('waited 1s')
+
+   // Get the data-test-id of the first li element
+    const liId = await page.$$eval('li .btn-address--full-size', (elements: any) => {
+        const firstElement = elements[0]?.closest('li'); // Find the closest li element
+        return firstElement ? firstElement.getAttribute('data-test-id') : null; // Get data-test-id of the li element
+    });
+    //console.log(liId)
+
+    // Click on the button inside the li element
+    await page.click(`li[data-test-id=${liId}] .btn-address--full-size`);
+    console.log('clicked address')
+
+    // Wait for the button to appear and be clickable
+    await page.waitForSelector('button.btn--default.btn--size-m.address-maps__submit');
+    console.log('red button is visible')
+    await page.waitForTimeout(2000);
+    //console.log('waited 2s')
+    // Click on the button
+    await page.click('button.btn--default.btn--size-m.address-maps__submit');
+    console.log('clicked red button')
+
+    await page.waitForTimeout(2000);
+    //console.log('waited 2s')
+
+    await page.mouse.move(100, 100);
+    console.log('moved mouse')
+
+
+    // Wait for the button to appear and be clickable
+    await page.waitForSelector('.complete-address--save-btn');
+    console.log('red button is visible')
+    await page.waitForTimeout(2000);
+    console.log('waited 2s')
+    // Click on the button
+    await page.click('.complete-address--save-btn');
+    console.log('clicked red button')
+    await page.waitForTimeout(5000);
+    console.log('waited 5s')
+    // const atacados = await page.$('//span[contains(text(), "Atacados")]');
+    // console.log('procurou o span')
+    // if (atacados) {
+    //     console.log('span found')
+    //     await atacados.click();
+    // }
+    const link = await page.locator('//a[span[contains(text(), "Atacados")]]');
+    const href = await link.getAttribute('href');
+
+    //console.log('Found href:', href);
+    const fullUrl = new URL(href, page.url()).href; // Make the href absolute by resolving against the current page URL
+    console.log(`Adding ${fullUrl} to the queue...`);
+    await requestQueue.addRequest({ url: fullUrl });
+
+    // const marketsLinks = await page.$$eval('.merchant-content__link', (links: any) =>
+    //     links.map((link: any) => link.getAttribute('href')?.replace(/&amp;/g, '&')) // Replace &amp; with & if necessary
+    // )
+    // console.log(`Found ${marketsLinks.length} markets links.`);
+
+    // // Add each category URL to the queue
+    // for (const link of marketsLinks) {
+    //     if (link) {
+    //         const fullUrl = new URL(link, page.url()).href; // Make the href absolute by resolving against the current page URL
+    //         console.log(`Adding ${fullUrl} to the queue...`);
+    //         await requestQueue.addRequest({ url: fullUrl });
+    //     }
+    // }
+}
+
+async function getAtacados(page: any, requestQueue: any): Promise<void>{
+    console.log(`Processing ${page.url()}...`);
+    const marketsLinks = await page.$$eval('.merchant-v2__link', (links: any) =>
+        links.map((link: any) => link.getAttribute('href')?.replace(/&amp;/g, '&')) // Replace &amp; with & if necessary
+    )
+    console.log(`Found ${marketsLinks.length} markets links.`);
+
+    // Add each category URL to the queue
+    for (const link of marketsLinks) {
+        if (link) {
+            const fullUrl = new URL(link, page.url()).href; // Make the href absolute by resolving against the current page URL
+            console.log(`Adding ${fullUrl} to the queue...`);
+            await requestQueue.addRequest({ url: fullUrl });
+        }
+    }
+}
 // Function to collect category links
 async function collectCategoryLinks(page: any, requestQueue: any): Promise<void> {
     console.log(`Processing ${page.url()}...`);
@@ -66,7 +168,9 @@ async function scrapeProducts(page: any): Promise<void> {
 
     await scrollToBottom();  // Scroll to ensure all products are loaded
 
+    await page.waitForSelector('.breadcrumbs-container__title', { timeout: 10000 });
     const category: string = await page.$eval('.breadcrumbs-container__title', (el:any) => el.textContent?.trim() || '');
+    const marketTitle: string = await page.$eval('.market-header__title', (el:any) => el.textContent?.trim() || 'sem nome');
 
     // Extract product data
     const products: Product[] = await page.evaluate(( ) => {
@@ -75,23 +179,48 @@ async function scrapeProducts(page: any): Promise<void> {
 
         productElements.forEach((el) => {
             const name = el.querySelector('.product-card__description')?.getAttribute('title') || '';
-            const price = el.querySelector('.product-card__price')?.textContent?.trim() || '';
             const imageUrl = el.querySelector('img.product-card-image__content')?.getAttribute('src') || '';
-            if (name && price) {
-                items.push({ name, price, imageUrl});
+        
+            // First, check if the product has a discount section
+            const priceContainer = el.querySelector('.product-card-scale-price');
+            
+            let regularPrice = '';
+            let discountPrice = '';
+            let discountCondition = '';
+        
+            if (priceContainer) {
+                // Product has a discount section
+                regularPrice = priceContainer.querySelector('span:first-child')?.textContent?.replace('cada', '').trim() || '';
+                discountPrice = priceContainer.querySelector('.product-card-scale-price__scale-price')?.textContent?.trim() || '';
+                discountCondition = priceContainer.querySelector('.product-card-scale-price-tag')?.textContent?.trim() || '';
+            } else {
+                // Product has only a regular price (no discount)
+                regularPrice = el.querySelector('.product-card__price')?.textContent?.trim() || '';
+            }
+        
+            if (name && regularPrice) {
+                items.push({ 
+                    name, 
+                    regularPrice, 
+                    discountPrice, 
+                    discountCondition, 
+                    imageUrl 
+                });
             }
         });
+        
 
         return items;
     });
 
     console.log(`Scraped ${products.length} products from ${page.url()}.`);
     //console.table(products);
-    const productsWithCategory = products.map((product) => ({ ...product, category }));
-    const dataset = await Actor.openDataset(category);
-    await dataset.pushData(productsWithCategory);
+    const productsWithCategory = products.map((product) => ({ ...product, category, market: marketTitle }));
+    // const path = marketTitle + '/' + category;
+    // const dataset = await Actor.openDataset(path);
+    // await dataset.pushData(productsWithCategory);
     // Save the scraped data
-    //await Actor.pushData(products);
+    await Actor.pushData(productsWithCategory);
 }
 
 Actor.main(async () => {
@@ -99,6 +228,7 @@ Actor.main(async () => {
     await requestQueue.addRequest({ url: baseUrl });
 
     const crawler = new PlaywrightCrawler({
+        requestHandlerTimeoutSecs: 120,
         requestQueue,
         launchContext: {
             launchOptions: {
@@ -106,18 +236,25 @@ Actor.main(async () => {
             },
         },
         requestHandler: async ({ page, request }) => {
-            console.log(`Processing ${request.url}...`);
+            //console.log(`Processing ${request.url}...`);
             await page.waitForTimeout(5000);
 
             if (request.url === baseUrl) {
-                // Collect category links on the main page
-                await collectCategoryLinks(page, requestQueue);
-            } else {
+                await getMarkets(page, requestQueue);
+            } else if (request.url.includes('corredor')) {
                 // Scrape products on category pages
                 await scrapeProducts(page);
             }
+            else if (request.url.includes('atacados')) {
+                // Scrape products on category pages
+                await getAtacados(page, requestQueue);
+            }
+            else {
+                // Collect category links on the main page
+                await collectCategoryLinks(page, requestQueue);
+            }
         },
-        maxConcurrency: 5, // Adjust concurrency based on your needs
+        maxConcurrency: 10, // Adjust concurrency based on your needs
     });
 
     await crawler.run();
