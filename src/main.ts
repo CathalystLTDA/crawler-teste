@@ -3,7 +3,9 @@ import { PlaywrightCrawler } from 'crawlee';
 
 interface Product {
     name: string;
-    price: string;
+    regularPrice: string;
+    discountPrice?: string;
+    discountCondition?: string;
     imageUrl: string;
     category?: string;
     market?: string;
@@ -19,7 +21,7 @@ async function getMarkets(page: any, requestQueue: any): Promise<void>{
     // Step 1: Type the address in the input field
     await page.type('.address-search-input__field', 'Rua Ernesto Fontoura 1401 São Geraldo');
     await page.waitForTimeout(1000);
-    console.log('waited 1s')
+    //console.log('waited 1s')
     await page.waitForTimeout(1000);
     console.log('waited 2s')
 
@@ -33,7 +35,7 @@ async function getMarkets(page: any, requestQueue: any): Promise<void>{
         const firstElement = elements[0]?.closest('li'); // Find the closest li element
         return firstElement ? firstElement.getAttribute('data-test-id') : null; // Get data-test-id of the li element
     });
-    console.log(liId)
+    //console.log(liId)
 
     // Click on the button inside the li element
     await page.click(`li[data-test-id=${liId}] .btn-address--full-size`);
@@ -43,13 +45,13 @@ async function getMarkets(page: any, requestQueue: any): Promise<void>{
     await page.waitForSelector('button.btn--default.btn--size-m.address-maps__submit');
     console.log('red button is visible')
     await page.waitForTimeout(2000);
-    console.log('waited 2s')
+    //console.log('waited 2s')
     // Click on the button
     await page.click('button.btn--default.btn--size-m.address-maps__submit');
     console.log('clicked red button')
 
     await page.waitForTimeout(2000);
-    console.log('waited 2s')
+    //console.log('waited 2s')
 
     await page.mouse.move(100, 100);
     console.log('moved mouse')
@@ -74,7 +76,7 @@ async function getMarkets(page: any, requestQueue: any): Promise<void>{
     const link = await page.locator('//a[span[contains(text(), "Atacados")]]');
     const href = await link.getAttribute('href');
 
-    console.log('Found href:', href);
+    //console.log('Found href:', href);
     const fullUrl = new URL(href, page.url()).href; // Make the href absolute by resolving against the current page URL
     console.log(`Adding ${fullUrl} to the queue...`);
     await requestQueue.addRequest({ url: fullUrl });
@@ -166,6 +168,7 @@ async function scrapeProducts(page: any): Promise<void> {
 
     await scrollToBottom();  // Scroll to ensure all products are loaded
 
+    await page.waitForSelector('.breadcrumbs-container__title', { timeout: 10000 });
     const category: string = await page.$eval('.breadcrumbs-container__title', (el:any) => el.textContent?.trim() || '');
     const marketTitle: string = await page.$eval('.market-header__title', (el:any) => el.textContent?.trim() || 'sem nome');
 
@@ -176,12 +179,36 @@ async function scrapeProducts(page: any): Promise<void> {
 
         productElements.forEach((el) => {
             const name = el.querySelector('.product-card__description')?.getAttribute('title') || '';
-            const price = el.querySelector('.product-card__price')?.textContent?.trim() || '';
             const imageUrl = el.querySelector('img.product-card-image__content')?.getAttribute('src') || '';
-            if (name && price) {
-                items.push({ name, price, imageUrl});
+        
+            // First, check if the product has a discount section
+            const priceContainer = el.querySelector('.product-card-scale-price');
+            
+            let regularPrice = '';
+            let discountPrice = '';
+            let discountCondition = '';
+        
+            if (priceContainer) {
+                // Product has a discount section
+                regularPrice = priceContainer.querySelector('span:first-child')?.textContent?.replace('cada', '').trim() || '';
+                discountPrice = priceContainer.querySelector('.product-card-scale-price__scale-price')?.textContent?.trim() || '';
+                discountCondition = priceContainer.querySelector('.product-card-scale-price-tag')?.textContent?.trim() || '';
+            } else {
+                // Product has only a regular price (no discount)
+                regularPrice = el.querySelector('.product-card__price')?.textContent?.trim() || '';
+            }
+        
+            if (name && regularPrice) {
+                items.push({ 
+                    name, 
+                    regularPrice, 
+                    discountPrice, 
+                    discountCondition, 
+                    imageUrl 
+                });
             }
         });
+        
 
         return items;
     });
@@ -205,11 +232,11 @@ Actor.main(async () => {
         requestQueue,
         launchContext: {
             launchOptions: {
-                headless: false,
+                headless: true,
             },
         },
         requestHandler: async ({ page, request }) => {
-            console.log(`Processing ${request.url}...`);
+            //console.log(`Processing ${request.url}...`);
             await page.waitForTimeout(5000);
 
             if (request.url === baseUrl) {
