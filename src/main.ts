@@ -6,9 +6,13 @@ interface Product {
     regularPrice: string;
     discountPrice?: string;
     discountCondition?: string;
+    discountPercentage?: string;
     imageUrl: string;
     category?: string;
     market?: string;
+    weight: string;
+    unit: string;
+    volume: string;
 }
 
 const baseUrl = 'https://www.ifood.com.br/mercados'; // Replace with the actual URL
@@ -168,6 +172,14 @@ async function scrapeProducts(page: any): Promise<void> {
 
     await scrollToBottom();  // Scroll to ensure all products are loaded
 
+    await page.waitForTimeout(1000)
+
+    await page.waitForFunction(() => {
+        const images = Array.from(document.querySelectorAll('img'));
+        return images.every(img => img.complete);
+    });
+    
+
     await page.waitForSelector('.breadcrumbs-container__title', { timeout: 10000 });
     const category: string = await page.$eval('.breadcrumbs-container__title', (el:any) => el.textContent?.trim() || '');
     const marketTitle: string = await page.$eval('.market-header__title', (el:any) => el.textContent?.trim() || 'sem nome');
@@ -180,13 +192,15 @@ async function scrapeProducts(page: any): Promise<void> {
         productElements.forEach((el) => {
             const name = el.querySelector('.product-card__description')?.getAttribute('title') || '';
             const imageUrl = el.querySelector('img.product-card-image__content')?.getAttribute('src') || '';
-        
+            //const details = el.querySelector('.product-card__details')?.textContent || '';
+
             // First, check if the product has a discount section
             const priceContainer = el.querySelector('.product-card-scale-price');
             
             let regularPrice = '';
             let discountPrice = '';
             let discountCondition = '';
+            let discountPercentage = '';
         
             if (priceContainer) {
                 // Product has a discount section
@@ -195,16 +209,42 @@ async function scrapeProducts(page: any): Promise<void> {
                 discountCondition = priceContainer.querySelector('.product-card-scale-price-tag')?.textContent?.trim() || '';
             } else {
                 // Product has only a regular price (no discount)
-                regularPrice = el.querySelector('.product-card__price')?.textContent?.trim() || '';
+                const price = el.querySelector('.product-card__price')?.textContent?.trim() || '';
+                // Check if the product has a discount inside price text
+                const priceMatch = price.match(
+                    /R\$\s*([\d,.]+)(?:-(\d+)%\s*R\$\s*([\d,.]+))?/
+                  );
+                if (priceMatch) {
+                    regularPrice = priceMatch[1];
+                    discountPrice = priceMatch[3];
+                    discountPercentage = priceMatch[2];
+                }
+                else{
+                    regularPrice = price;
+                }
             }
-        
+
+            const weigthRegex = /\b(\d+(?:[.,]\d+)?)\s*(kg|g)\b/gi;
+
+            const unitRegex = /\b(\d+)\s*(?:unid\.?|unidade)\b/gi;
+
+            const volumeRegex = /\b(\d+(?:[.,]\d+)?)\s*(ml|l)\b/gi;
+            
+            const weight = name.match(weigthRegex)?.[0] || '';
+            const unit = name.match(unitRegex)?.[0] || '';
+            const volume = name.match(volumeRegex)?.[0] || '';
+
             if (name && regularPrice) {
                 items.push({ 
                     name, 
                     regularPrice, 
                     discountPrice, 
-                    discountCondition, 
-                    imageUrl 
+                    discountCondition,
+                    discountPercentage, 
+                    imageUrl,
+                    weight,
+                    unit,
+                    volume
                 });
             }
         });
@@ -254,7 +294,7 @@ Actor.main(async () => {
                 await collectCategoryLinks(page, requestQueue);
             }
         },
-        maxConcurrency: 10, // Adjust concurrency based on your needs
+        maxConcurrency: 5, // Adjust concurrency based on your needs
     });
 
     await crawler.run();
